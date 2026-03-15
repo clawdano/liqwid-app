@@ -156,14 +156,21 @@ body {
 .market-btn.disabled:hover { border-color: var(--border); color: var(--text); }
 
 .market-btn .market-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
+.market-btn .market-icon-fallback {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: var(--text-muted);
 }
@@ -314,6 +321,19 @@ input[type=number] { -moz-appearance: textfield; }
   background: var(--bg);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
+}
+
+.portfolio-token-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.portfolio-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: contain;
 }
 
 .portfolio-token {

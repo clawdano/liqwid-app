@@ -2,6 +2,8 @@
 // Liqwid Market Registry — All 24+ Markets (Mainnet)
 // ═══════════════════════════════════════════════════════════════════
 
+const LOGO_BASE = "https://app.liqwid.finance/assets";
+
 export const MARKETS = {
   Ada: {
     name: "ADA",
@@ -299,3 +301,14 @@ export const MARKET_ORDER = [
   "MIN", "SNEK", "LQ", "WMT", "AGIX", "IAG", "NIGHT", "SHEN",
   "DAI", "EURC", "ERG", "COPI", "USDT", "PYUSD", "USDCx", "SUNDAE",
 ];
+
+/**
+ * Get logo URL for a market. Uses Liqwid app's asset CDN.
+ */
+export function getLogoUrl(marketId) {
+  const market = MARKETS[marketId];
+  if (!market) return "";
+  // Logo filenames match the display name (uppercase), except iUSD → IUSD
+  const logoName = market.name === "iUSD" ? "IUSD" : market.name;
+  return `${LOGO_BASE}/${logoName}.svg`;
+}

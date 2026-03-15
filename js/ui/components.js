@@ -2,7 +2,7 @@
 // UI Components — DOM Rendering
 // ═══════════════════════════════════════════════════════════════════
 
-import { MARKETS, MARKET_ORDER } from "../config/markets.js";
+import { MARKETS, MARKET_ORDER, getLogoUrl } from "../config/markets.js";
 import { state } from "./state.js";
 import { findUtxoByToken, fetchWalletBalances } from "../protocol/blockfrost.js";
 import { deserializeMarketState, formatMarketStats, underlyingToQTokens, qTokensToUnderlying } from "../protocol/market-state.js";
@@ -21,8 +21,10 @@ export function renderMarketGrid() {
     const btn = document.createElement("button");
     btn.className = `market-btn${market.supported ? "" : " disabled"}`;
     btn.dataset.market = id;
+    const logoUrl = getLogoUrl(id);
     btn.innerHTML = `
-      <div class="market-icon">${market.name.slice(0, 3)}</div>
+      <img class="market-icon" src="${logoUrl}" alt="${market.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+      <div class="market-icon-fallback" style="display:none">${market.name.slice(0, 3)}</div>
       <span>${market.name}</span>
     `;
 
@@ -226,8 +228,12 @@ export async function renderPortfolio() {
         valueHtml = `<div class="value">&asymp; ${val} ${pos.name}</div>`;
       }
 
+      const logoUrl = getLogoUrl(pos.marketId);
       div.innerHTML = `
-        <span class="portfolio-token">q${pos.name}</span>
+        <div class="portfolio-token-info">
+          <img class="portfolio-icon" src="${logoUrl}" alt="${pos.name}" onerror="this.style.display='none'" />
+          <span class="portfolio-token">q${pos.name}</span>
+        </div>
         <div class="portfolio-balance">
           <div class="amount">${qDisplay}</div>
           ${valueHtml}
