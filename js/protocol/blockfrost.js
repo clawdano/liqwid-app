@@ -50,36 +50,45 @@ async function bf(path, opts = {}) {
 }
 
 /**
- * Find all UTxOs holding a given token (policyId with empty token name).
- * Returns the first UTxO that contains the token with inline datum.
+ * Find UTxO holding a given token (policyId with empty token name).
+ * Returns the first UTxO with a datum, with plutusData resolved to parsed JSON.
  */
 export async function findUtxoByToken(policyId) {
-  // Get addresses holding this asset
-  const asset = policyId; // empty token name → asset = policyId alone
+  const utxo = await findUtxoByTokenRaw(policyId);
+  if (utxo.output.datumHash) {
+    utxo.output.plutusData = await fetchDatumJson(utxo.output.datumHash);
+  }
+  return utxo;
+}
+
+/**
+ * Internal: find raw UTxO by token without resolving datum.
+ */
+async function findUtxoByTokenRaw(policyId) {
+  const asset = policyId;
   const addresses = await bf(`/assets/${asset}/addresses`);
 
   if (!addresses || addresses.length === 0) {
     throw new Error(`No addresses found for token ${policyId.slice(0, 16)}...`);
   }
 
-  // Try each address until we find UTxO with this token and inline datum
   for (const addrEntry of addresses) {
     const utxos = await bf(`/addresses/${addrEntry.address}/utxos/${asset}`);
     if (utxos && utxos.length > 0) {
-      // Return first UTxO with inline datum
       for (const u of utxos) {
-        if (u.inline_datum) {
+        if (u.data_hash || u.inline_datum) {
           return blockfrostUtxoToMesh(u, addrEntry.address);
         }
       }
     }
   }
 
-  throw new Error(`No UTxO with inline datum found for token ${policyId.slice(0, 16)}...`);
+  throw new Error(`No UTxO with datum found for token ${policyId.slice(0, 16)}...`);
 }
 
 /**
  * Find all Action UTxOs for a market (for random selection / contention avoidance).
+ * Resolves datums to parsed JSON.
  */
 export async function findAllActionUtxos(actionTokenPolicy) {
   const asset = actionTokenPolicy;
@@ -89,8 +98,12 @@ export async function findAllActionUtxos(actionTokenPolicy) {
   for (const addrEntry of addresses) {
     const utxos = await bf(`/addresses/${addrEntry.address}/utxos/${asset}`);
     for (const u of utxos) {
-      if (u.inline_datum) {
-        results.push(blockfrostUtxoToMesh(u, addrEntry.address));
+      if (u.data_hash || u.inline_datum) {
+        const meshUtxo = blockfrostUtxoToMesh(u, addrEntry.address);
+        if (meshUtxo.output.datumHash) {
+          meshUtxo.output.plutusData = await fetchDatumJson(meshUtxo.output.datumHash);
+        }
+        results.push(meshUtxo);
       }
     }
   }
@@ -99,7 +112,8 @@ export async function findAllActionUtxos(actionTokenPolicy) {
 }
 
 /**
- * Convert Blockfrost UTxO format to MeshJS-compatible format.
+ * Convert Blockfrost UTxO format to our internal format.
+ * plutusData will be null initially — call fetchDatumJson() to get parsed datum.
  */
 function blockfrostUtxoToMesh(bfUtxo, address) {
   return {
@@ -113,9 +127,31 @@ function blockfrostUtxoToMesh(bfUtxo, address) {
         unit: a.unit,
         quantity: a.quantity,
       })),
-      plutusData: bfUtxo.inline_datum,
+      // data_hash is used to fetch the parsed JSON datum
+      datumHash: bfUtxo.data_hash || null,
+      plutusData: null, // populated by fetchDatumJson
     },
   };
+}
+
+/**
+ * Fetch parsed JSON datum from Blockfrost using datum hash.
+ * Returns the json_value in {list: [{int: ...}, ...]} format.
+ */
+async function fetchDatumJson(datumHash) {
+  const data = await bf(`/scripts/datum/${datumHash}`);
+  return data.json_value;
+}
+
+/**
+ * Find UTxO by token and resolve its datum to parsed JSON.
+ */
+async function findUtxoWithDatum(policyId) {
+  const utxo = await findUtxoByTokenRaw(policyId);
+  if (utxo.output.datumHash) {
+    utxo.output.plutusData = await fetchDatumJson(utxo.output.datumHash);
+  }
+  return utxo;
 }
 
 /**
