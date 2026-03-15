@@ -119,6 +119,47 @@ function blockfrostUtxoToMesh(bfUtxo, address) {
 }
 
 /**
+ * Find a reference script UTxO for a given script hash.
+ * Queries Blockfrost for the script's address and looks for a UTxO with script_ref.
+ * Returns null if not found (caller should handle gracefully).
+ */
+export async function findScriptRefUtxo(scriptHash) {
+  try {
+    // Get the script address (where the reference script is deployed)
+    const scriptInfo = await bf(`/scripts/${scriptHash}`);
+    if (!scriptInfo) return null;
+
+    // Try to find UTxOs at the script's address that contain a script ref
+    // Scripts are typically deployed at their own address
+    const scriptAddr = scriptInfo.script_address;
+    if (!scriptAddr) return null;
+
+    const utxos = await bf(`/addresses/${scriptAddr}/utxos`);
+    if (!utxos || utxos.length === 0) return null;
+
+    // Find a UTxO with a script reference
+    for (const u of utxos) {
+      if (u.reference_script_hash === scriptHash) {
+        return {
+          input: {
+            txHash: u.tx_hash,
+            outputIndex: u.tx_index || u.output_index,
+          },
+          output: {
+            address: scriptAddr,
+            amount: u.amount.map(a => ({ unit: a.unit, quantity: a.quantity })),
+          },
+        };
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetch address UTxOs (for wallet queries).
  */
 export async function fetchAddressUtxos(address) {

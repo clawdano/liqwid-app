@@ -2,9 +2,9 @@
 // Transaction Builder — Deposit & Withdraw
 // ═══════════════════════════════════════════════════════════════════
 
-import { MeshTxBuilder, BlockfrostProvider, mConStr0 } from "@meshsdk/core";
+import { MeshTxBuilder, BlockfrostProvider, mConStr0, BrowserWallet } from "@meshsdk/core";
 import { MARKETS } from "../config/markets.js";
-import { findUtxoByToken, clearCache } from "./blockfrost.js";
+import { findUtxoByToken, findScriptRefUtxo, clearCache } from "./blockfrost.js";
 import { deserializeMarketState, underlyingToQTokens, qTokensToUnderlying } from "./market-state.js";
 import {
   deserializeActionDatum,
@@ -25,6 +25,15 @@ function getProvider() {
 }
 
 /**
+ * Get a MeshJS BrowserWallet from the connected wallet name.
+ */
+async function getMeshWallet() {
+  const walletName = state.get("walletName");
+  if (!walletName) throw new Error("No wallet connected");
+  return BrowserWallet.enable(walletName);
+}
+
+/**
  * Build and submit a deposit transaction.
  */
 export async function executeDeposit(marketId, amountHuman) {
@@ -37,29 +46,30 @@ export async function executeDeposit(marketId, amountHuman) {
       showTxStatus("building", "Building deposit transaction...");
 
       const provider = getProvider();
-      const wallet = state.get("wallet");
-      const userAddress = await wallet.getChangeAddress();
 
-      // Fetch reference UTxOs
-      const [marketStateUtxo, marketParamsUtxo] = await Promise.all([
+      // Use MeshJS BrowserWallet for proper UTxO formatting
+      const meshWallet = await getMeshWallet();
+      const userAddress = await meshWallet.getChangeAddress();
+      const userUtxos = await meshWallet.getUtxos();
+
+      // Fetch reference UTxOs and action UTxO in parallel
+      const [marketStateUtxo, marketParamsUtxo, actionUtxo, actionScriptRef, qTokenScriptRef] = await Promise.all([
         findUtxoByToken(market.marketStateToken),
         findUtxoByToken(market.marketParamsToken),
+        findRandomActionUtxo(market.actionToken),
+        findScriptRefUtxo(market.actionScriptHash),
+        findScriptRefUtxo(market.qTokenPolicy),
       ]);
 
-      // Pick random Action UTxO
-      const actionUtxo = await findRandomActionUtxo(market.actionToken);
-
       // Decode MarketState for qTokenRate
-      const marketStateDatum = marketStateUtxo.output.plutusData;
-      const marketState = deserializeMarketState(marketStateDatum);
+      const marketState = deserializeMarketState(marketStateUtxo.output.plutusData);
       const qTokenRate = marketState.qTokenRate;
 
       // Calculate qTokens to mint
       const qTokensToMint = underlyingToQTokens(depositAmount, qTokenRate);
 
       // Decode and update ActionDatum
-      const actionDatumRaw = actionUtxo.output.plutusData;
-      const currentActionDatum = deserializeActionDatum(actionDatumRaw);
+      const currentActionDatum = deserializeActionDatum(actionUtxo.output.plutusData);
       const newActionDatum = updateForDeposit(currentActionDatum, depositAmount, qTokensToMint);
 
       // Calculate new Action UTxO value
@@ -70,40 +80,49 @@ export async function executeDeposit(marketId, amountHuman) {
       // Build action output amounts
       const actionOutputAmounts = [];
       if (market.isNative) {
-        // ADA market: add deposit lovelace to action
         actionOutputAmounts.push({ unit: "lovelace", quantity: (currentActionLovelace + depositAmount).toString() });
       } else {
-        // Non-ADA: keep existing lovelace, add native token
         actionOutputAmounts.push({ unit: "lovelace", quantity: currentActionLovelace.toString() });
-        // Find existing native token amount in action UTxO
         const underlyingUnit = market.underlying.policyId + market.underlying.tokenName;
         const existingToken = actionUtxo.output.amount.find(a => a.unit === underlyingUnit);
         const existingQty = BigInt(existingToken?.quantity || "0");
         actionOutputAmounts.push({ unit: underlyingUnit, quantity: (existingQty + depositAmount).toString() });
       }
-      // Always include action token
       actionOutputAmounts.push({ unit: market.actionToken, quantity: "1" });
 
       // Build transaction
       const mesh = new MeshTxBuilder({ fetcher: provider, evaluator: provider });
 
-      const userUtxos = await wallet.getUtxos();
-
-      await mesh
-        // Reference inputs
+      let txChain = mesh
+        // Reference inputs (read-only state)
         .readOnlyTxInReference(marketStateUtxo.input.txHash, marketStateUtxo.input.outputIndex)
         .readOnlyTxInReference(marketParamsUtxo.input.txHash, marketParamsUtxo.input.outputIndex)
-        // Spend Action UTxO
+        // Spend Action UTxO via reference script
         .spendingPlutusScriptV2()
         .txIn(actionUtxo.input.txHash, actionUtxo.input.outputIndex)
         .txInInlineDatumPresent()
-        .txInRedeemerValue(UNIT_REDEEMER)
-        .spendingTxInReference(actionUtxo.input.txHash, actionUtxo.input.outputIndex)
+        .txInRedeemerValue(UNIT_REDEEMER);
+
+      // Use reference script if found, otherwise the action UTxO itself may contain the script
+      if (actionScriptRef) {
+        txChain = txChain.spendingTxInReference(actionScriptRef.input.txHash, actionScriptRef.input.outputIndex, market.actionScriptHash);
+      } else {
+        txChain = txChain.spendingTxInReference(actionUtxo.input.txHash, actionUtxo.input.outputIndex, market.actionScriptHash);
+      }
+
+      txChain = txChain
         // Mint qTokens
         .mintPlutusScriptV2()
-        .mint(qTokensToMint.toString(), market.qTokenPolicy, "")
-        .mintRedeemerValue(UNIT_REDEEMER)
-        .mintingScript(market.qTokenPolicy)
+        .mint(qTokensToMint.toString(), market.qTokenPolicy, "");
+
+      txChain = txChain.mintRedeemerValue(UNIT_REDEEMER);
+
+      // Use reference script for minting if found
+      if (qTokenScriptRef) {
+        txChain = txChain.mintTxInReference(qTokenScriptRef.input.txHash, qTokenScriptRef.input.outputIndex);
+      }
+
+      txChain = txChain
         // Output: Updated Action UTxO
         .txOut(actionUtxo.output.address, actionOutputAmounts)
         .txOutInlineDatumValue(serializeActionDatum(newActionDatum))
@@ -113,18 +132,20 @@ export async function executeDeposit(marketId, amountHuman) {
           { unit: market.qTokenPolicy, quantity: qTokensToMint.toString() },
         ])
         .changeAddress(userAddress)
-        .selectUtxosFrom(userUtxos)
-        .complete();
+        .selectUtxosFrom(userUtxos);
+
+      await txChain.complete();
 
       const unsignedTx = mesh.txHex;
 
-      // Sign
+      // Sign via CIP-30 API
       showTxStatus("signing", "Waiting for wallet signature...");
-      const signedTx = await wallet.signTx(unsignedTx);
+      const walletApi = state.get("walletApi");
+      const signedTx = await walletApi.signTx(unsignedTx, true);
 
       // Submit
       showTxStatus("submitting", "Submitting transaction...");
-      const txHash = await wallet.submitTx(signedTx);
+      const txHash = await walletApi.submitTx(signedTx);
 
       showTxStatus("confirmed", `Deposit confirmed!`, txHash);
       clearCache();
@@ -133,7 +154,6 @@ export async function executeDeposit(marketId, amountHuman) {
 
     } catch (err) {
       const msg = err.message || String(err);
-      // Retry on contention (UTxO already spent)
       if (attempt < MAX_RETRIES - 1 && (msg.includes("UTxO") || msg.includes("already spent") || msg.includes("contention"))) {
         clearCache();
         showToast(`Contention detected, retrying with different Action UTxO... (${attempt + 2}/${MAX_RETRIES})`, "info");
@@ -158,38 +178,35 @@ export async function executeWithdraw(marketId, amountHuman, mode = "underlying"
       showTxStatus("building", "Building withdraw transaction...");
 
       const provider = getProvider();
-      const wallet = state.get("wallet");
-      const userAddress = await wallet.getChangeAddress();
+      const meshWallet = await getMeshWallet();
+      const userAddress = await meshWallet.getChangeAddress();
+      const userUtxos = await meshWallet.getUtxos();
 
-      // Fetch reference UTxOs
-      const [marketStateUtxo, marketParamsUtxo] = await Promise.all([
+      // Fetch reference UTxOs and action UTxO in parallel
+      const [marketStateUtxo, marketParamsUtxo, actionUtxo, actionScriptRef, qTokenScriptRef] = await Promise.all([
         findUtxoByToken(market.marketStateToken),
         findUtxoByToken(market.marketParamsToken),
+        findRandomActionUtxo(market.actionToken),
+        findScriptRefUtxo(market.actionScriptHash),
+        findScriptRefUtxo(market.qTokenPolicy),
       ]);
 
-      // Pick random Action UTxO
-      const actionUtxo = await findRandomActionUtxo(market.actionToken);
-
       // Decode MarketState
-      const marketStateDatum = marketStateUtxo.output.plutusData;
-      const marketState = deserializeMarketState(marketStateDatum);
+      const marketState = deserializeMarketState(marketStateUtxo.output.plutusData);
       const qTokenRate = marketState.qTokenRate;
 
       // Calculate amounts based on mode
       let withdrawAmount, qTokensToBurn;
       if (mode === "underlying") {
         withdrawAmount = BigInt(Math.floor(amountHuman * (10 ** decimals)));
-        // Ceil division for burning: ceil(underlying / rate) = ceil(underlying * denom / num)
         qTokensToBurn = (withdrawAmount * qTokenRate[1] + qTokenRate[0] - 1n) / qTokenRate[0];
       } else {
-        // User specified qTokens
         qTokensToBurn = BigInt(Math.floor(amountHuman * (10 ** decimals)));
         withdrawAmount = qTokensToUnderlying(qTokensToBurn, qTokenRate);
       }
 
       // Decode and update ActionDatum
-      const actionDatumRaw = actionUtxo.output.plutusData;
-      const currentActionDatum = deserializeActionDatum(actionDatumRaw);
+      const currentActionDatum = deserializeActionDatum(actionUtxo.output.plutusData);
       const newActionDatum = updateForWithdraw(currentActionDatum, withdrawAmount, qTokensToBurn);
 
       // Calculate new Action UTxO value
@@ -220,13 +237,10 @@ export async function executeWithdraw(marketId, amountHuman, mode = "underlying"
         userReceiveAmounts.push({ unit: underlyingUnit, quantity: withdrawAmount.toString() });
       }
 
-      // Find user's qToken UTxO
-      const userUtxos = await wallet.getUtxos();
-
       // Build transaction
       const mesh = new MeshTxBuilder({ fetcher: provider, evaluator: provider });
 
-      await mesh
+      let txChain = mesh
         // Reference inputs
         .readOnlyTxInReference(marketStateUtxo.input.txHash, marketStateUtxo.input.outputIndex)
         .readOnlyTxInReference(marketParamsUtxo.input.txHash, marketParamsUtxo.input.outputIndex)
@@ -234,29 +248,43 @@ export async function executeWithdraw(marketId, amountHuman, mode = "underlying"
         .spendingPlutusScriptV2()
         .txIn(actionUtxo.input.txHash, actionUtxo.input.outputIndex)
         .txInInlineDatumPresent()
-        .txInRedeemerValue(UNIT_REDEEMER)
-        .spendingTxInReference(actionUtxo.input.txHash, actionUtxo.input.outputIndex)
-        // Burn qTokens (negative mint)
+        .txInRedeemerValue(UNIT_REDEEMER);
+
+      if (actionScriptRef) {
+        txChain = txChain.spendingTxInReference(actionScriptRef.input.txHash, actionScriptRef.input.outputIndex, market.actionScriptHash);
+      } else {
+        txChain = txChain.spendingTxInReference(actionUtxo.input.txHash, actionUtxo.input.outputIndex, market.actionScriptHash);
+      }
+
+      // Burn qTokens (negative mint)
+      txChain = txChain
         .mintPlutusScriptV2()
         .mint("-" + qTokensToBurn.toString(), market.qTokenPolicy, "")
-        .mintRedeemerValue(UNIT_REDEEMER)
-        .mintingScript(market.qTokenPolicy)
+        .mintRedeemerValue(UNIT_REDEEMER);
+
+      if (qTokenScriptRef) {
+        txChain = txChain.mintTxInReference(qTokenScriptRef.input.txHash, qTokenScriptRef.input.outputIndex);
+      }
+
+      txChain = txChain
         // Output: Updated Action UTxO
         .txOut(actionUtxo.output.address, actionOutputAmounts)
         .txOutInlineDatumValue(serializeActionDatum(newActionDatum))
         // Output: underlying to user
         .txOut(userAddress, userReceiveAmounts)
         .changeAddress(userAddress)
-        .selectUtxosFrom(userUtxos)
-        .complete();
+        .selectUtxosFrom(userUtxos);
+
+      await txChain.complete();
 
       const unsignedTx = mesh.txHex;
 
       showTxStatus("signing", "Waiting for wallet signature...");
-      const signedTx = await wallet.signTx(unsignedTx);
+      const walletApi = state.get("walletApi");
+      const signedTx = await walletApi.signTx(unsignedTx, true);
 
       showTxStatus("submitting", "Submitting transaction...");
-      const txHash = await wallet.submitTx(signedTx);
+      const txHash = await walletApi.submitTx(signedTx);
 
       showTxStatus("confirmed", `Withdrawal confirmed!`, txHash);
       clearCache();
