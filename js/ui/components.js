@@ -4,9 +4,8 @@
 
 import { MARKETS, MARKET_ORDER } from "../config/markets.js";
 import { state } from "./state.js";
-import { findUtxoByToken } from "../protocol/blockfrost.js";
+import { findUtxoByToken, fetchWalletBalances } from "../protocol/blockfrost.js";
 import { deserializeMarketState, formatMarketStats, underlyingToQTokens, qTokensToUnderlying } from "../protocol/market-state.js";
-import { deserializeDatum } from "@meshsdk/core";
 import { showToast } from "./notifications.js";
 
 // ─── Market Grid ────────────────────────────────────────────────
@@ -74,7 +73,8 @@ export async function loadMarketStats(marketId) {
 
   try {
     const utxo = await findUtxoByToken(market.marketStateToken);
-    const datum = deserializeDatum(utxo.output.plutusData);
+    // Blockfrost inline_datum is already parsed JSON — no MeshJS deserializeDatum needed
+    const datum = utxo.output.plutusData;
     const marketState = deserializeMarketState(datum);
 
     state.set("marketState", marketState);
@@ -173,40 +173,40 @@ export async function renderPortfolio() {
   list.innerHTML = '<p class="muted">Scanning wallet for qTokens...</p>';
 
   try {
-    const utxos = state.get("walletUtxos") || [];
+    // Fetch balances from Blockfrost using the wallet's hex address
+    const addrHex = state.get("walletAddressHex");
+    const bech32 = state.get("walletAddress");
+    const addr = bech32 || addrHex;
+
+    const balances = await fetchWalletBalances(addr);
+    state.set("walletBalances", balances);
+
     const positions = [];
 
-    // Scan for qTokens across all markets
     for (const [marketId, market] of Object.entries(MARKETS)) {
       if (!market.supported) continue;
-      let totalQTokens = 0n;
 
-      for (const utxo of utxos) {
-        for (const asset of utxo.output.amount) {
-          if (asset.unit.startsWith(market.qTokenPolicy)) {
-            totalQTokens += BigInt(asset.quantity);
-          }
+      // Find qToken balance
+      const qTokenBalance = balances.find(b => b.unit.startsWith(market.qTokenPolicy));
+      if (!qTokenBalance) continue;
+
+      const totalQTokens = BigInt(qTokenBalance.quantity);
+      let underlyingValue = null;
+
+      try {
+        const qTokenRate = state.get("qTokenRate");
+        if (qTokenRate && state.get("selectedMarket") === marketId) {
+          underlyingValue = qTokensToUnderlying(totalQTokens, qTokenRate);
         }
-      }
+      } catch {}
 
-      if (totalQTokens > 0n) {
-        // Try to get current rate for value calculation
-        let underlyingValue = null;
-        try {
-          const qTokenRate = state.get("qTokenRate");
-          if (qTokenRate && state.get("selectedMarket") === marketId) {
-            underlyingValue = qTokensToUnderlying(totalQTokens, qTokenRate);
-          }
-        } catch {}
-
-        positions.push({
-          marketId,
-          name: market.name,
-          decimals: market.decimals,
-          qTokens: totalQTokens,
-          underlyingValue,
-        });
-      }
+      positions.push({
+        marketId,
+        name: market.name,
+        decimals: market.decimals,
+        qTokens: totalQTokens,
+        underlyingValue,
+      });
     }
 
     if (positions.length === 0) {
@@ -269,28 +269,22 @@ export function updateWalletButton() {
 
 export function setDepositMax() {
   const marketId = state.get("selectedMarket");
-  const utxos = state.get("walletUtxos");
-  if (!marketId || !utxos) return;
+  const balances = state.get("walletBalances");
+  if (!marketId || !balances) return;
 
   const market = MARKETS[marketId];
   let total = 0n;
 
-  for (const utxo of utxos) {
-    for (const asset of utxo.output.amount) {
-      if (market.isNative && asset.unit === "lovelace") {
-        total += BigInt(asset.quantity);
-      } else if (!market.isNative) {
-        const underlyingUnit = market.underlying.policyId + market.underlying.tokenName;
-        if (asset.unit === underlyingUnit) {
-          total += BigInt(asset.quantity);
-        }
-      }
-    }
-  }
-
-  // Reserve 5 ADA for fees if depositing ADA
-  if (market.isNative && total > 5_000_000n) {
-    total -= 5_000_000n;
+  if (market.isNative) {
+    const ada = balances.find(b => b.unit === "lovelace");
+    total = ada ? BigInt(ada.quantity) : 0n;
+    // Reserve 5 ADA for fees
+    if (total > 5_000_000n) total -= 5_000_000n;
+    else total = 0n;
+  } else {
+    const underlyingUnit = market.underlying.policyId + market.underlying.tokenName;
+    const tok = balances.find(b => b.unit === underlyingUnit);
+    total = tok ? BigInt(tok.quantity) : 0n;
   }
 
   if (total > 0n) {
@@ -304,21 +298,15 @@ export function setDepositMax() {
 
 export function setWithdrawMax() {
   const marketId = state.get("selectedMarket");
-  const utxos = state.get("walletUtxos");
+  const balances = state.get("walletBalances");
   const qTokenRate = state.get("qTokenRate");
-  if (!marketId || !utxos || !qTokenRate) return;
+  if (!marketId || !balances || !qTokenRate) return;
 
   const market = MARKETS[marketId];
   const mode = document.querySelector('input[name="withdraw-mode"]:checked')?.value || "underlying";
-  let totalQTokens = 0n;
 
-  for (const utxo of utxos) {
-    for (const asset of utxo.output.amount) {
-      if (asset.unit.startsWith(market.qTokenPolicy)) {
-        totalQTokens += BigInt(asset.quantity);
-      }
-    }
-  }
+  const qBal = balances.find(b => b.unit.startsWith(market.qTokenPolicy));
+  const totalQTokens = qBal ? BigInt(qBal.quantity) : 0n;
 
   if (totalQTokens > 0n) {
     if (mode === "qtokens") {

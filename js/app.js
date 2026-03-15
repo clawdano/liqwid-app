@@ -5,7 +5,6 @@
 import { state } from "./ui/state.js";
 import { showToast, hideTxStatus } from "./ui/notifications.js";
 import { detectWallets, connectWallet } from "./wallet/connection.js";
-import { executeDeposit, executeWithdraw } from "./protocol/tx-builder.js";
 import {
   renderMarketGrid,
   loadMarketStats,
@@ -17,21 +16,36 @@ import {
   setWithdrawMax,
 } from "./ui/components.js";
 
+// Lazy-load tx-builder only when needed (it pulls in MeshJS)
+let txBuilder = null;
+async function getTxBuilder() {
+  if (!txBuilder) {
+    txBuilder = await import("./protocol/tx-builder.js");
+  }
+  return txBuilder;
+}
+
 // ─── Init ───────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
-  renderMarketGrid();
-  wireWalletButton();
-  wireTabs();
-  wireDepositForm();
-  wireWithdrawForm();
-  wireTxStatusClose();
+  try {
+    renderMarketGrid();
+    wireWalletButton();
+    wireTabs();
+    wireDepositForm();
+    wireWithdrawForm();
+    wireTxStatusClose();
 
-  // React to wallet connection
-  state.on("walletAddress", () => {
-    updateWalletButton();
-    renderPortfolio();
-  });
+    // React to wallet connection
+    state.on("walletAddress", () => {
+      updateWalletButton();
+      renderPortfolio();
+    });
+
+    console.log("[Liqwid App] Initialized");
+  } catch (err) {
+    console.error("[Liqwid App] Init failed:", err);
+  }
 });
 
 // ─── Wallet ─────────────────────────────────────────────────────
@@ -41,7 +55,6 @@ function wireWalletButton() {
 
   btn.addEventListener("click", async () => {
     if (state.get("wallet")) {
-      // Already connected — show portfolio panel
       document.getElementById("portfolio").classList.toggle("hidden");
       return;
     }
@@ -52,19 +65,16 @@ function wireWalletButton() {
       return;
     }
 
-    // If only one wallet, connect directly
     if (wallets.length === 1) {
       await doConnect(wallets[0].name);
       return;
     }
 
-    // Show wallet picker
     showWalletPicker(wallets);
   });
 }
 
 function showWalletPicker(wallets) {
-  // Remove existing picker
   document.querySelector(".wallet-picker")?.remove();
 
   const picker = document.createElement("div");
@@ -94,7 +104,6 @@ function showWalletPicker(wallets) {
     inner.appendChild(btn);
   }
 
-  // Cancel button
   const cancel = document.createElement("button");
   cancel.className = "btn btn-full";
   cancel.style.marginTop = "8px";
@@ -108,19 +117,20 @@ function showWalletPicker(wallets) {
 }
 
 async function doConnect(walletName) {
+  const btn = document.getElementById("wallet-btn");
   try {
-    const btn = document.getElementById("wallet-btn");
     btn.textContent = "Connecting...";
     btn.disabled = true;
 
     await connectWallet(walletName);
     showToast(`Connected to ${walletName}`, "success");
   } catch (err) {
+    console.error("Wallet connect failed:", err);
     showToast(`Failed to connect: ${err.message}`, "error");
     state.set("wallet", null);
     state.set("walletAddress", null);
   } finally {
-    document.getElementById("wallet-btn").disabled = false;
+    btn.disabled = false;
     updateWalletButton();
   }
 }
@@ -162,10 +172,10 @@ function wireDepositForm() {
     submitBtn.textContent = "Processing...";
 
     try {
-      await executeDeposit(marketId, val);
+      const tb = await getTxBuilder();
+      await tb.executeDeposit(marketId, val);
       input.value = "";
       updateDepositPreview();
-      // Refresh stats and portfolio
       await Promise.all([loadMarketStats(marketId), renderPortfolio()]);
     } catch (err) {
       console.error("Deposit failed:", err);
@@ -205,7 +215,8 @@ function wireWithdrawForm() {
     submitBtn.textContent = "Processing...";
 
     try {
-      await executeWithdraw(marketId, val, mode);
+      const tb = await getTxBuilder();
+      await tb.executeWithdraw(marketId, val, mode);
       input.value = "";
       updateWithdrawPreview();
       await Promise.all([loadMarketStats(marketId), renderPortfolio()]);

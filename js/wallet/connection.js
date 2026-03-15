@@ -1,11 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════
-// CIP-30 Wallet Connection
+// CIP-30 Wallet Connection (raw API — no MeshJS dependency)
 // ═══════════════════════════════════════════════════════════════════
 
-import { BrowserWallet } from "@meshsdk/core";
 import { state } from "../ui/state.js";
 
-const KNOWN_WALLETS = ["nami", "eternl", "lace", "flint", "gerowallet", "typhoncip30", "nufi", "begin", "vespr"];
+const KNOWN_WALLETS = ["eternl", "nami", "lace", "flint", "gerowallet", "typhoncip30", "nufi", "begin", "vespr"];
 
 export function detectWallets() {
   if (!window.cardano) return [];
@@ -23,33 +22,122 @@ export function detectWallets() {
 }
 
 export async function connectWallet(name) {
-  const wallet = await BrowserWallet.enable(name);
-  const address = (await wallet.getChangeAddress());
-  const utxos = await wallet.getUtxos();
+  const api = await window.cardano[name].enable();
 
-  state.set("wallet", wallet);
+  // Get change address (hex-encoded per CIP-30)
+  const changeAddrHex = await api.getChangeAddress();
+
+  // Get used addresses
+  const usedAddrs = await api.getUsedAddresses();
+  const primaryAddrHex = usedAddrs[0] || changeAddrHex;
+
+  // Convert hex to bech32 for display and Blockfrost queries
+  const bech32Addr = hexAddrToBech32(primaryAddrHex);
+
+  state.set("walletApi", api);
   state.set("walletName", name);
-  state.set("walletAddress", address);
-  state.set("walletUtxos", utxos);
+  state.set("walletAddress", bech32Addr);
+  state.set("walletAddressHex", changeAddrHex);
 
-  return { wallet, address, utxos };
+  // Wrapper matching the interface tx-builder.js expects
+  state.set("wallet", {
+    getChangeAddress: async () => changeAddrHex,
+    getUtxos: async () => (await api.getUtxos()) || [],
+    signTx: async (txHex) => api.signTx(txHex, true),
+    submitTx: async (txHex) => api.submitTx(txHex),
+  });
+
+  return { api, address: bech32Addr };
 }
 
-export async function refreshWalletUtxos() {
-  const wallet = state.get("wallet");
-  if (!wallet) return [];
-  const utxos = await wallet.getUtxos();
-  state.set("walletUtxos", utxos);
-  return utxos;
+/**
+ * Convert a hex-encoded Shelley address to bech32.
+ * Pure JS — no external dependencies.
+ */
+function hexAddrToBech32(hex) {
+  try {
+    const bytes = hexToBytes(hex);
+    // Header byte: upper nibble = type, lower nibble = network
+    const header = bytes[0];
+    const network = header & 0x0f;
+    const prefix = network === 1 ? "addr" : "addr_test";
+    return bech32Encode(prefix, bytes);
+  } catch {
+    // Fallback: return hex (Blockfrost accepts hex too)
+    return hex;
+  }
 }
 
-export async function getChangeAddress() {
-  const wallet = state.get("wallet");
-  if (!wallet) throw new Error("Wallet not connected");
-  return wallet.getChangeAddress();
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+// ─── Bech32 encoder (pure JS) ───────────────────────────────────
+
+const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+
+function bech32Polymod(values) {
+  const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  let chk = 1;
+  for (const v of values) {
+    const b = chk >> 25;
+    chk = ((chk & 0x1ffffff) << 5) ^ v;
+    for (let i = 0; i < 5; i++) {
+      if ((b >> i) & 1) chk ^= GEN[i];
+    }
+  }
+  return chk;
+}
+
+function bech32HrpExpand(hrp) {
+  const ret = [];
+  for (let i = 0; i < hrp.length; i++) ret.push(hrp.charCodeAt(i) >> 5);
+  ret.push(0);
+  for (let i = 0; i < hrp.length; i++) ret.push(hrp.charCodeAt(i) & 31);
+  return ret;
+}
+
+function bech32CreateChecksum(hrp, data) {
+  const values = bech32HrpExpand(hrp).concat(data).concat([0, 0, 0, 0, 0, 0]);
+  const polymod = bech32Polymod(values) ^ 0x2bc830a3; // bech32m constant
+  const ret = [];
+  for (let i = 0; i < 6; i++) ret.push((polymod >> (5 * (5 - i))) & 31);
+  return ret;
+}
+
+function convertBits(data, fromBits, toBits, pad) {
+  let acc = 0, bits = 0;
+  const ret = [];
+  const maxv = (1 << toBits) - 1;
+  for (const value of data) {
+    acc = (acc << fromBits) | value;
+    bits += fromBits;
+    while (bits >= toBits) {
+      bits -= toBits;
+      ret.push((acc >> bits) & maxv);
+    }
+  }
+  if (pad) {
+    if (bits > 0) ret.push((acc << (toBits - bits)) & maxv);
+  }
+  return ret;
+}
+
+function bech32Encode(hrp, data) {
+  const data5bit = convertBits(data, 8, 5, true);
+  const checksum = bech32CreateChecksum(hrp, data5bit);
+  let result = hrp + "1";
+  for (const d of data5bit.concat(checksum)) {
+    result += BECH32_CHARSET[d];
+  }
+  return result;
 }
 
 export function shortenAddress(addr) {
   if (!addr || addr.length < 20) return addr;
-  return addr.slice(0, 12) + "..." + addr.slice(-8);
+  return addr.slice(0, 12) + "..." + addr.slice(-6);
 }

@@ -125,3 +125,20 @@ export async function fetchAddressUtxos(address) {
   const utxos = await bf(`/addresses/${address}/utxos`, { noCache: true });
   return utxos.map(u => blockfrostUtxoToMesh(u, address));
 }
+
+/**
+ * Fetch aggregated balances for a wallet address.
+ * Returns array of { unit, quantity } like Blockfrost /addresses/{addr} response.
+ */
+export async function fetchWalletBalances(address) {
+  try {
+    const data = await bf(`/addresses/${address}`, { noCache: true });
+    return data.amount || [];
+  } catch (err) {
+    // Address may not exist on chain yet
+    if (err.message && err.message.includes("404")) {
+      return [{ unit: "lovelace", quantity: "0" }];
+    }
+    throw err;
+  }
+}

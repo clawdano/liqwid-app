@@ -2,7 +2,7 @@
 // Transaction Builder — Deposit & Withdraw
 // ═══════════════════════════════════════════════════════════════════
 
-import { MeshTxBuilder, BlockfrostProvider, deserializeDatum, mConStr0 } from "@meshsdk/core";
+import { MeshTxBuilder, BlockfrostProvider, mConStr0 } from "@meshsdk/core";
 import { MARKETS } from "../config/markets.js";
 import { findUtxoByToken, clearCache } from "./blockfrost.js";
 import { deserializeMarketState, underlyingToQTokens, qTokensToUnderlying } from "./market-state.js";
@@ -50,7 +50,7 @@ export async function executeDeposit(marketId, amountHuman) {
       const actionUtxo = await findRandomActionUtxo(market.actionToken);
 
       // Decode MarketState for qTokenRate
-      const marketStateDatum = deserializeDatum(marketStateUtxo.output.plutusData);
+      const marketStateDatum = marketStateUtxo.output.plutusData;
       const marketState = deserializeMarketState(marketStateDatum);
       const qTokenRate = marketState.qTokenRate;
 
@@ -58,7 +58,7 @@ export async function executeDeposit(marketId, amountHuman) {
       const qTokensToMint = underlyingToQTokens(depositAmount, qTokenRate);
 
       // Decode and update ActionDatum
-      const actionDatumRaw = deserializeDatum(actionUtxo.output.plutusData);
+      const actionDatumRaw = actionUtxo.output.plutusData;
       const currentActionDatum = deserializeActionDatum(actionDatumRaw);
       const newActionDatum = updateForDeposit(currentActionDatum, depositAmount, qTokensToMint);
 
@@ -171,7 +171,7 @@ export async function executeWithdraw(marketId, amountHuman, mode = "underlying"
       const actionUtxo = await findRandomActionUtxo(market.actionToken);
 
       // Decode MarketState
-      const marketStateDatum = deserializeDatum(marketStateUtxo.output.plutusData);
+      const marketStateDatum = marketStateUtxo.output.plutusData;
       const marketState = deserializeMarketState(marketStateDatum);
       const qTokenRate = marketState.qTokenRate;
 
@@ -188,7 +188,7 @@ export async function executeWithdraw(marketId, amountHuman, mode = "underlying"
       }
 
       // Decode and update ActionDatum
-      const actionDatumRaw = deserializeDatum(actionUtxo.output.plutusData);
+      const actionDatumRaw = actionUtxo.output.plutusData;
       const currentActionDatum = deserializeActionDatum(actionDatumRaw);
       const newActionDatum = updateForWithdraw(currentActionDatum, withdrawAmount, qTokensToBurn);
 
