@@ -1,0 +1,452 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Liqwid App — Dark DeFi Theme
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --bg: #0d1117;
+  --bg-card: #161b22;
+  --bg-input: #0d1117;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #7d8590;
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --green: #3fb950;
+  --red: #f85149;
+  --yellow: #d29922;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.hidden { display: none !important; }
+.muted { color: var(--text-muted); }
+
+/* ─── Header ─────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.logo {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.logo-accent { color: var(--accent); }
+
+/* ─── Buttons ────────────────────────────────────────────────────── */
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.15s;
+}
+
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:disabled:hover { border-color: var(--border); color: var(--text); }
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #000; }
+.btn-primary:disabled { background: var(--border); border-color: var(--border); color: var(--text-muted); }
+.btn-primary:disabled:hover { background: var(--border); border-color: var(--border); color: var(--text-muted); }
+
+.btn-full { width: 100%; padding: 12px; font-size: 1rem; }
+.btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+.btn-wallet {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 600;
+  min-width: 160px;
+}
+
+.btn-wallet:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #000; }
+
+.btn-wallet.connected {
+  background: var(--bg-card);
+  color: var(--green);
+  border-color: var(--green);
+}
+
+/* ─── Main Layout ────────────────────────────────────────────────── */
+
+.main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ─── Cards ──────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.card h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.75rem;
+}
+
+/* ─── Market Grid ────────────────────────────────────────────────── */
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.market-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.market-btn:hover { border-color: var(--accent); color: var(--accent); }
+.market-btn.active { border-color: var(--accent); background: rgba(88, 166, 255, 0.1); color: var(--accent); }
+.market-btn.disabled { opacity: 0.35; cursor: not-allowed; }
+.market-btn.disabled:hover { border-color: var(--border); color: var(--text); }
+
+.market-btn .market-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* ─── Stats Grid ─────────────────────────────────────────────────── */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.stat-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Tabs ───────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ─── Forms ──────────────────────────────────────────────────────── */
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.input-row input {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.input-row input:focus { border-color: var(--accent); }
+.input-row input::placeholder { color: var(--text-muted); }
+
+/* Remove number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+.preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.preview-value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.withdraw-mode-toggle {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.withdraw-mode-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.withdraw-mode-toggle input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+/* ─── Portfolio ──────────────────────────────────────────────────── */
+
+.portfolio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.portfolio-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.portfolio-token {
+  font-weight: 600;
+}
+
+.portfolio-balance {
+  text-align: right;
+}
+
+.portfolio-balance .amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.portfolio-balance .value {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ─── TX Status Bar ──────────────────────────────────────────────── */
+
+.tx-status {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  width: calc(100% - 32px);
+  max-width: 520px;
+}
+
+.tx-status-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.tx-icon { font-size: 1.2rem; }
+.tx-icon.building { color: var(--yellow); }
+.tx-icon.signing { color: var(--yellow); }
+.tx-icon.submitting { color: var(--accent); }
+.tx-icon.confirmed { color: var(--green); }
+.tx-icon.error { color: var(--red); }
+
+#tx-status-text { flex: 1; font-size: 0.9rem; }
+
+.tx-link {
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.tx-link:hover { text-decoration: underline; }
+
+.tx-close {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+/* ─── Toasts ─────────────────────────────────────────────────────── */
+
+.toast-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.toast {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  font-size: 0.85rem;
+  animation: toast-in 0.2s ease-out;
+}
+
+.toast.error { border-color: var(--red); color: var(--red); }
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.info { border-color: var(--accent); color: var(--accent); }
+
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ─── Loading ────────────────────────────────────────────────────── */
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-stats .stat-value {
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+  color: transparent;
+  min-width: 80px;
+}
+
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ─── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .header { padding: 12px 16px; }
+  .logo { font-size: 1.2rem; }
+  .main { padding: 16px 12px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .market-grid { grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); }
+  .btn-wallet { min-width: 130px; font-size: 0.8rem; }
+}

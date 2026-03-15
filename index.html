@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liqwid Finance — Deposit & Withdraw</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="assets/favicon.ico">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <h1 class="logo">Liqwid<span class="logo-accent">App</span></h1>
+    </div>
+    <div class="header-right">
+      <button id="wallet-btn" class="btn btn-wallet">Connect Wallet</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Market Selector -->
+    <section class="card market-selector-card">
+      <h2>Select Market</h2>
+      <div id="market-grid" class="market-grid"></div>
+    </section>
+
+    <!-- Market Stats -->
+    <section id="market-stats" class="card stats-card hidden">
+      <h2 id="stats-title">Market Stats</h2>
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="stat-label">Total Supply</span>
+          <span id="stat-supply" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Total Borrowed</span>
+          <span id="stat-borrowed" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Utilization</span>
+          <span id="stat-utilization" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Supply APY</span>
+          <span id="stat-apy" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">qToken Rate</span>
+          <span id="stat-rate" class="stat-value">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Available Liquidity</span>
+          <span id="stat-available" class="stat-value">—</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Deposit / Withdraw Tabs -->
+    <section id="action-panel" class="card action-card hidden">
+      <div class="tabs">
+        <button class="tab active" data-tab="deposit">Deposit</button>
+        <button class="tab" data-tab="withdraw">Withdraw</button>
+      </div>
+
+      <!-- Deposit Form -->
+      <div id="tab-deposit" class="tab-content active">
+        <div class="form-group">
+          <label>Amount (<span id="deposit-token-label">ADA</span>)</label>
+          <div class="input-row">
+            <input id="deposit-amount" type="number" placeholder="0.00" min="0" step="any">
+            <button id="deposit-max" class="btn btn-sm">MAX</button>
+          </div>
+        </div>
+        <div class="preview">
+          <span>You will receive</span>
+          <span id="deposit-preview" class="preview-value">— qTokens</span>
+        </div>
+        <button id="deposit-btn" class="btn btn-primary btn-full" disabled>Connect Wallet</button>
+      </div>
+
+      <!-- Withdraw Form -->
+      <div id="tab-withdraw" class="tab-content">
+        <div class="form-group">
+          <div class="withdraw-mode-toggle">
+            <label>
+              <input type="radio" name="withdraw-mode" value="underlying" checked> Receive <span class="withdraw-token-label">ADA</span>
+            </label>
+            <label>
+              <input type="radio" name="withdraw-mode" value="qtokens"> Burn qTokens
+            </label>
+          </div>
+          <div class="input-row">
+            <input id="withdraw-amount" type="number" placeholder="0.00" min="0" step="any">
+            <button id="withdraw-max" class="btn btn-sm">MAX</button>
+          </div>
+        </div>
+        <div class="preview">
+          <span id="withdraw-preview-label">You will burn</span>
+          <span id="withdraw-preview" class="preview-value">— qTokens</span>
+        </div>
+        <button id="withdraw-btn" class="btn btn-primary btn-full" disabled>Connect Wallet</button>
+      </div>
+    </section>
+
+    <!-- Portfolio -->
+    <section id="portfolio" class="card portfolio-card hidden">
+      <h2>Your Portfolio</h2>
+      <div id="portfolio-list" class="portfolio-list">
+        <p class="muted">Connect wallet to view positions</p>
+      </div>
+    </section>
+
+    <!-- TX Status -->
+    <div id="tx-status" class="tx-status hidden">
+      <div class="tx-status-inner">
+        <span id="tx-status-icon" class="tx-icon"></span>
+        <span id="tx-status-text"></span>
+        <a id="tx-link" href="#" target="_blank" class="tx-link hidden">View on CardanoScan</a>
+        <button id="tx-status-close" class="btn btn-sm tx-close">&times;</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Toast Container -->
+  <div id="toasts" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@meshsdk/core": "https://esm.sh/@meshsdk/core@1.9.0-beta.101"
+    }
+  }
+  </script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
