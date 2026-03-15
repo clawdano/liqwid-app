@@ -2,7 +2,7 @@
 // Liqwid Market Registry — All 24+ Markets (Mainnet)
 // ═══════════════════════════════════════════════════════════════════
 
-const LOGO_BASE = "https://app.liqwid.finance/assets";
+const LOGO_BASE = "assets/tokens";
 
 export const MARKETS = {
   Ada: {
@@ -302,13 +302,19 @@ export const MARKET_ORDER = [
   "DAI", "EURC", "ERG", "COPI", "USDT", "PYUSD", "USDCx", "SUNDAE",
 ];
 
+// Tokens with CoinGecko PNGs; the rest use generated SVGs
+const PNG_TOKENS = new Set([
+  "ADA", "USDA", "USDC", "DJED", "BTC", "ETH", "AGIX",
+  "DAI", "EURC", "ERG", "USDT", "PYUSD", "USDCx",
+]);
+
 /**
- * Get logo URL for a market. Uses Liqwid app's asset CDN.
+ * Get logo URL for a market.
  */
 export function getLogoUrl(marketId) {
   const market = MARKETS[marketId];
   if (!market) return "";
-  // Logo filenames match the display name (uppercase), except iUSD → IUSD
   const logoName = market.name === "iUSD" ? "IUSD" : market.name;
-  return `${LOGO_BASE}/${logoName}.svg`;
+  const ext = PNG_TOKENS.has(logoName) ? "png" : "svg";
+  return `${LOGO_BASE}/${logoName}.${ext}`;
 }
