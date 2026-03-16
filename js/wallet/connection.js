@@ -103,7 +103,7 @@ function bech32HrpExpand(hrp) {
 
 function bech32CreateChecksum(hrp, data) {
   const values = bech32HrpExpand(hrp).concat(data).concat([0, 0, 0, 0, 0, 0]);
-  const polymod = bech32Polymod(values) ^ 0x2bc830a3; // bech32m constant
+  const polymod = bech32Polymod(values) ^ 1; // bech32 (NOT bech32m)
   const ret = [];
   for (let i = 0; i < 6; i++) ret.push((polymod >> (5 * (5 - i))) & 31);
   return ret;

@@ -2,7 +2,7 @@
 // Transaction Builder — Deposit & Withdraw
 // ═══════════════════════════════════════════════════════════════════
 
-import { MeshTxBuilder, BlockfrostProvider, mConStr0, BrowserWallet } from "@meshsdk/core";
+import { MeshTxBuilder, BlockfrostProvider, mConStr0 } from "@meshsdk/core";
 import { MARKETS } from "../config/markets.js";
 import { findUtxoByToken, findScriptRefUtxo, clearCache } from "./blockfrost.js";
 import { deserializeMarketState, underlyingToQTokens, qTokensToUnderlying } from "./market-state.js";
@@ -25,12 +25,18 @@ function getProvider() {
 }
 
 /**
- * Get a MeshJS BrowserWallet from the connected wallet name.
+ * Get wallet address and UTxOs from CIP-30 API via our wrapper.
  */
-async function getMeshWallet() {
-  const walletName = state.get("walletName");
-  if (!walletName) throw new Error("No wallet connected");
-  return BrowserWallet.enable(walletName);
+async function getWalletInfo() {
+  const walletApi = state.get("walletApi");
+  if (!walletApi) throw new Error("No wallet connected");
+
+  // CIP-30 returns hex addresses — MeshTxBuilder accepts hex
+  const changeAddr = await walletApi.getChangeAddress();
+
+  // Get UTxOs as hex CBOR — MeshTxBuilder.selectUtxosFrom can handle these
+  // when we use the provider's fetchAddressUTxOs instead
+  return { changeAddr, walletApi };
 }
 
 /**
@@ -47,10 +53,10 @@ export async function executeDeposit(marketId, amountHuman) {
 
       const provider = getProvider();
 
-      // Use MeshJS BrowserWallet for proper UTxO formatting
-      const meshWallet = await getMeshWallet();
-      const userAddress = await meshWallet.getChangeAddress();
-      const userUtxos = await meshWallet.getUtxos();
+      // Use hex address from CIP-30 API + provider-fetched UTxOs
+      const { changeAddr, walletApi } = await getWalletInfo();
+      const userAddress = changeAddr;
+      const userUtxos = await provider.fetchAddressUTxOs(userAddress);
 
       // Fetch reference UTxOs and action UTxO in parallel
       const [marketStateUtxo, marketParamsUtxo, actionUtxo, actionScriptRef, qTokenScriptRef] = await Promise.all([
@@ -140,7 +146,6 @@ export async function executeDeposit(marketId, amountHuman) {
 
       // Sign via CIP-30 API
       showTxStatus("signing", "Waiting for wallet signature...");
-      const walletApi = state.get("walletApi");
       const signedTx = await walletApi.signTx(unsignedTx, true);
 
       // Submit
@@ -178,9 +183,9 @@ export async function executeWithdraw(marketId, amountHuman, mode = "underlying"
       showTxStatus("building", "Building withdraw transaction...");
 
       const provider = getProvider();
-      const meshWallet = await getMeshWallet();
-      const userAddress = await meshWallet.getChangeAddress();
-      const userUtxos = await meshWallet.getUtxos();
+      const { changeAddr, walletApi } = await getWalletInfo();
+      const userAddress = changeAddr;
+      const userUtxos = await provider.fetchAddressUTxOs(userAddress);
 
       // Fetch reference UTxOs and action UTxO in parallel
       const [marketStateUtxo, marketParamsUtxo, actionUtxo, actionScriptRef, qTokenScriptRef] = await Promise.all([
@@ -280,7 +285,6 @@ export async function executeWithdraw(marketId, amountHuman, mode = "underlying"
       const unsignedTx = mesh.txHex;
 
       showTxStatus("signing", "Waiting for wallet signature...");
-      const walletApi = state.get("walletApi");
       const signedTx = await walletApi.signTx(unsignedTx, true);
 
       showTxStatus("submitting", "Submitting transaction...");
