@@ -129,10 +129,18 @@
   <script type="importmap">
   {
     "imports": {
-      "@meshsdk/core": "https://esm.sh/@meshsdk/core@1.9.0-beta.101?bundle-deps",
-      "bignumber.js": "https://esm.sh/bignumber.js@9.1.2?cjs-exports=BigNumber"
+      "@meshsdk/core": "./js/lib/mesh-sdk.js"
     }
   }
+  </script>
+  <script>
+    // Buffer polyfill needed by MeshJS
+    if (typeof globalThis.Buffer === 'undefined') {
+      globalThis.Buffer = { from: (a,e) => typeof a === 'string' ? new TextEncoder().encode(a) : new Uint8Array(a), alloc: (n) => new Uint8Array(n), isBuffer: () => false };
+    }
+    if (typeof globalThis.process === 'undefined') {
+      globalThis.process = { env: {}, version: '' };
+    }
   </script>
   <script type="module" src="js/app.js"></script>
 </body>
